@@ -245,13 +245,52 @@ with collection.batch.dynamic() as batch:
 print(f"✅ Uploaded {len(products)} products with images")
 ```
 
-### 7. Upload Text Documents with Chunking
+### 7. Upload Text Documents with Intelligent Chunking
+
+#### Option A: Interactive Chunking (Recommended - No API Key)
+
+When using Claude Skills interactively, ask Claude to analyze and chunk your document intelligently:
+
+**Example Conversation:**
+```
+You: "I have a 50-page technical manual at /path/to/manual.pdf.
+     Please read it, analyze the structure, and chunk it intelligently
+     for my TechnicalDocuments collection."
+
+Claude: *Reads the document*
+        *Identifies sections, headings, logical boundaries*
+        *Creates semantically complete chunks with metadata*
+        *Uploads to Weaviate with proper section names, page numbers, topics*
+
+        ✅ Uploaded 47 intelligent chunks:
+           - HVAC Systems (pages 1-12): 8 chunks
+           - Ductwork Design (pages 13-25): 12 chunks
+           - Seismic Requirements (pages 26-35): 10 chunks
+           ...
+```
+
+**Why This Works:**
+- Claude understands document structure (headings, sections, topics)
+- Chunks at natural semantic boundaries, not arbitrary character counts
+- Extracts metadata automatically (section names, page numbers, image context)
+- No API key needed - uses your existing Claude session
+- Perfect for technical manuals, cookbooks, structured documents
+
+**How to Use:**
+1. Open the document in Claude (upload file or paste text)
+2. Reference your collection name and desired chunking strategy
+3. Claude analyzes structure and creates optimal chunks
+4. Claude uploads directly to Weaviate with rich metadata
+
+#### Option B: Simple Character-Based Chunking (No Intelligence)
+
+For quick, automated chunking without semantic analysis:
 
 ```python
 from pathlib import Path
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-    """Split text into overlapping chunks"""
+    """Split text into overlapping chunks (simple, no intelligence)"""
     chunks = []
     start = 0
     while start < len(text):
@@ -284,6 +323,123 @@ with collection.batch.dynamic() as batch:
 
 print(f"✅ Uploaded {len(chunks)} document chunks")
 ```
+
+**Limitations:**
+- Breaks at arbitrary character positions (may split sentences mid-word)
+- No understanding of document structure
+- Can't extract metadata automatically
+- May separate related content
+
+#### Option C: Markdown/Heading-Based Chunking
+
+For documents with clear markdown structure:
+
+```python
+import re
+from pathlib import Path
+
+def chunk_by_headings(markdown_text: str) -> list[dict]:
+    """Split markdown by ## headings, preserving structure"""
+    chunks = []
+
+    # Split on h2 headings
+    sections = re.split(r'^## ', markdown_text, flags=re.MULTILINE)
+
+    for section in sections[1:]:  # Skip content before first heading
+        lines = section.split('\n')
+        heading = lines[0].strip()
+        content = '\n'.join(lines[1:]).strip()
+
+        if content:
+            chunks.append({
+                'title': heading,
+                'content': content,
+                'section': heading
+            })
+
+    return chunks
+
+# Read markdown file
+doc_path = Path("documentation.md")
+markdown = doc_path.read_text()
+
+# Chunk by headings
+chunks = chunk_by_headings(markdown)
+
+collection = client.collections.get("TechnicalDocuments")
+
+with collection.batch.dynamic() as batch:
+    for i, chunk in enumerate(chunks):
+        batch.add_object(
+            properties={
+                "title": chunk['title'],
+                "content": chunk['content'],
+                "section": chunk['section'],
+                "page": i + 1,
+                "hasImage": False,
+                "tags": ["documentation"]
+            }
+        )
+
+print(f"✅ Uploaded {len(chunks)} sections")
+```
+
+#### Option D: PDF Chunking with Page Awareness
+
+For PDF documents with page structure:
+
+```python
+import PyPDF2
+from pathlib import Path
+
+def chunk_pdf_by_pages(pdf_path: str, pages_per_chunk: int = 3) -> list[dict]:
+    """Chunk PDF by grouping pages together"""
+    chunks = []
+
+    with open(pdf_path, 'rb') as file:
+        reader = PyPDF2.PdfReader(file)
+        total_pages = len(reader.pages)
+
+        for start_page in range(0, total_pages, pages_per_chunk):
+            end_page = min(start_page + pages_per_chunk, total_pages)
+
+            # Extract text from pages
+            text = ""
+            for page_num in range(start_page, end_page):
+                text += reader.pages[page_num].extract_text()
+
+            chunks.append({
+                'content': text,
+                'page_start': start_page + 1,
+                'page_end': end_page,
+                'page_range': f"{start_page + 1}-{end_page}"
+            })
+
+    return chunks
+
+# Chunk PDF
+pdf_chunks = chunk_pdf_by_pages("technical_manual.pdf", pages_per_chunk=3)
+
+collection = client.collections.get("TechnicalDocuments")
+
+with collection.batch.dynamic() as batch:
+    for chunk in pdf_chunks:
+        batch.add_object(
+            properties={
+                "title": f"Pages {chunk['page_range']}",
+                "content": chunk['content'],
+                "section": "Unknown",  # Could be enhanced with heading detection
+                "page": chunk['page_start'],
+                "pageRange": chunk['page_range'],
+                "hasImage": False,
+                "tags": ["technical", "manual"]
+            }
+        )
+
+print(f"✅ Uploaded {len(pdf_chunks)} page-based chunks")
+```
+
+**Recommendation:** Use **Option A (Interactive Chunking)** for best results with technical documents. Claude can understand your document structure and create semantically meaningful chunks with proper metadata.
 
 ### 8. Progress Tracking for Large Uploads
 
