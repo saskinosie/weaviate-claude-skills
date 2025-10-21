@@ -109,19 +109,34 @@ python-dotenv>=1.0.0
 
 ### Environment Setup
 
-Create a `.env` file with your credentials:
+Your Weaviate credentials go in a `.env` file in this directory:
 
-```bash
-# Weaviate Connection
-WEAVIATE_URL=your-cluster.weaviate.cloud
-WEAVIATE_API_KEY=your-weaviate-api-key
+1. **Copy the template**:
+   ```bash
+   cp .env.example .env
+   ```
 
-# Vectorizer API Keys (optional, depending on your setup)
-OPENAI_API_KEY=your-openai-api-key
-COHERE_KEY=your-cohere-api-key
-```
+2. **Edit `.env` with your credentials**:
+   ```bash
+   # Weaviate Connection (REQUIRED)
+   WEAVIATE_URL=your-cluster.weaviate.cloud  # NO https:// prefix
+   WEAVIATE_API_KEY=your-weaviate-api-key
 
-**Important**: Never commit `.env` files to version control!
+   # Vectorizer API Keys (optional, only if using these services)
+   OPENAI_API_KEY=your-openai-api-key
+   COHERE_API_KEY=your-cohere-api-key
+   ```
+
+3. **Where to find your Weaviate credentials**:
+   - Log into [Weaviate Cloud Console](https://console.weaviate.cloud/)
+   - Click on your cluster
+   - **REST Endpoint**: Copy the URL (without `https://`)
+   - **API Key**: Click "API Keys" to view/generate
+
+**Important**:
+- `.env` is in `.gitignore` - never commit secrets to version control!
+- Share `.env.example` with your clients as a template
+- Each person needs their own `.env` file with their credentials
 
 ## Workflow
 
