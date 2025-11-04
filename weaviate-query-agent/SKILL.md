@@ -1,20 +1,25 @@
 ---
 name: weaviate-query-agent
-description: Search and retrieve data from Weaviate using semantic search, filters, RAG, and hybrid queries
-version: 1.0.0
+description: Search and retrieve data from local Weaviate using semantic search, filters, RAG, and hybrid queries
+version: 2.0.0
 author: Scott Askinosie
 dependencies:
   - weaviate-connection
   - weaviate-collection-manager
+  - weaviate-local-setup
 ---
 
 # Weaviate Query Agent Skill
 
-This skill helps you search and retrieve data from Weaviate collections using semantic vector search, keyword search, filters, and RAG capabilities.
+This skill helps you search and retrieve data from your **local Weaviate collections** using semantic vector search, keyword search, filters, and RAG capabilities.
+
+## Important Note
+
+**This skill is designed for LOCAL Weaviate instances only.** Ensure you have Weaviate running locally in Docker before using this skill.
 
 ## Purpose
 
-Query your Weaviate collections intelligently to find relevant information, perform Q&A, and analyze your data.
+Query your local Weaviate collections intelligently to find relevant information, perform Q&A, and analyze your data.
 
 ## When to Use This Skill
 
@@ -25,8 +30,23 @@ Query your Weaviate collections intelligently to find relevant information, perf
 - User asks about finding similar items
 - User needs to combine vector search with filters
 
+## Prerequisites Check
+
+**Claude should verify these prerequisites before proceeding:**
+
+1. ✅ **weaviate-local-setup** completed - Python environment and dependencies installed
+2. ✅ **weaviate-connection** completed - Successfully connected to Weaviate
+3. ✅ **weaviate-data-ingestion** used - Collection has data to query
+4. ✅ **Docker container running** - Weaviate is accessible at localhost:8080
+
+**If any prerequisites are missing, Claude should:**
+- Load the required prerequisite skill first
+- Guide the user through the setup
+- Then return to this skill
+
 ## Prerequisites
 
+- **Local Weaviate running in Docker** (see **weaviate-local-setup** skill)
 - Active Weaviate connection (use **weaviate-connection** skill first)
 - Collection with data (use **weaviate-data-ingestion** skill to add data)
 - Python weaviate-client library installed
@@ -314,6 +334,286 @@ answer = response.choices[0].message.content
 print(answer)
 ```
 
+### Vision-Enabled RAG (Query Images with GPT-4o Vision)
+
+When your collection contains images (like maps, charts, diagrams), you can use GPT-4o Vision to analyze them:
+
+#### Single Image Analysis
+
+```python
+from openai import OpenAI
+import base64
+
+# Search Weaviate for results with visual content
+weaviate_client = client.collections.get("Cook_Engineering_Manual")
+search_results = weaviate_client.query.near_text(
+    query="Missouri wind zone map",
+    limit=5,
+    return_properties=["content", "section", "page", "visual_content", "visual_description", "has_critical_visual"]
+)
+
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Process results and analyze images
+for obj in search_results.objects:
+    props = obj.properties
+
+    # Check if this result has visual content
+    if props.get('has_critical_visual') and props.get('visual_content'):
+        print(f"\n📊 Analyzing visual content from page {props.get('page')}")
+
+        # The image is already base64 encoded in Weaviate
+        image_base64 = props['visual_content']
+
+        # Call GPT-4o Vision to analyze the image
+        vision_response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Question: Is Missouri considered a high wind zone?\n\nContext: {props.get('content', '')}\n\nPlease analyze the image and answer the question based on what you see."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000
+        )
+
+        answer = vision_response.choices[0].message.content
+        print(f"\n🤖 Answer:\n{answer}")
+        print(f"\n📄 Source: {props.get('section')} - Page {props.get('page')}")
+```
+
+#### Complete Vision RAG Pipeline
+
+```python
+from openai import OpenAI
+import os
+
+def vision_rag_query(
+    question: str,
+    collection_name: str = "TechnicalDocuments",
+    limit: int = 5
+):
+    """
+    Complete RAG pipeline with vision support.
+    Searches Weaviate, finds relevant text and images, uses GPT-4o Vision to analyze.
+    """
+
+    # Step 1: Connect to Weaviate
+    weaviate_client = weaviate.connect_to_weaviate_cloud(
+        cluster_url=os.getenv("WEAVIATE_URL"),
+        auth_credentials=weaviate.auth.Auth.api_key(os.getenv("WEAVIATE_API_KEY")),
+        skip_init_checks=True
+    )
+
+    try:
+        # Step 2: Search for relevant content
+        print(f"🔍 Searching for: {question}")
+        collection = weaviate_client.collections.get(collection_name)
+
+        response = collection.query.near_text(
+            query=question,
+            limit=limit,
+            return_properties=["content", "section", "page", "visual_content",
+                             "visual_description", "has_critical_visual"]
+        )
+
+        if not response.objects:
+            return "No relevant information found."
+
+        # Step 3: Process results - separate text and visual content
+        text_context = []
+        visual_items = []
+
+        for obj in response.objects:
+            props = obj.properties
+
+            # Collect text context
+            text_context.append(
+                f"[{props.get('section', 'Unknown')} - Page {props.get('page', 'N/A')}]\n"
+                f"{props.get('content', '')}"
+            )
+
+            # Collect visual content for analysis
+            if props.get('has_critical_visual') and props.get('visual_content'):
+                visual_items.append({
+                    'image': props['visual_content'],
+                    'description': props.get('visual_description', ''),
+                    'page': props.get('page'),
+                    'section': props.get('section'),
+                    'context': props.get('content', '')
+                })
+
+        # Step 4: Analyze with GPT-4o Vision if images found
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        if visual_items:
+            print(f"🖼️  Found {len(visual_items)} images - analyzing with GPT-4o Vision...")
+
+            # Build message content with both text and images
+            message_content = [
+                {
+                    "type": "text",
+                    "text": f"Question: {question}\n\nText Context:\n" + "\n\n".join(text_context[:3])
+                }
+            ]
+
+            # Add images to the message
+            for idx, item in enumerate(visual_items[:3]):  # Limit to 3 images
+                message_content.append({
+                    "type": "text",
+                    "text": f"\n\nImage {idx+1} (Page {item['page']} - {item['section']}):\nContext: {item['context'][:200]}..."
+                })
+                message_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{item['image']}",
+                        "detail": "high"  # Use high detail for technical diagrams
+                    }
+                })
+
+            # Call GPT-4o Vision
+            vision_response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a technical assistant with vision capabilities. Analyze both text and images to provide accurate, comprehensive answers. When analyzing maps, charts, or diagrams, describe what you see and relate it to the question."
+                    },
+                    {
+                        "role": "user",
+                        "content": message_content
+                    }
+                ],
+                max_tokens=2000
+            )
+
+            answer = vision_response.choices[0].message.content
+
+        else:
+            # No images - use text-only RAG
+            print("📝 No images found - using text-only RAG...")
+
+            text_response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a technical assistant. Answer based on the provided context."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Question: {question}\n\nContext:\n" + "\n\n".join(text_context)
+                    }
+                ],
+                max_tokens=1000
+            )
+
+            answer = text_response.choices[0].message.content
+
+        # Step 5: Format response
+        result = f"\n{'='*70}\n"
+        result += f"🤖 ANSWER:\n\n{answer}\n"
+        result += f"\n{'='*70}\n"
+        result += f"📚 SOURCES:\n\n"
+
+        for i, obj in enumerate(response.objects[:5], 1):
+            props = obj.properties
+            visual_indicator = " 🖼️" if props.get('has_critical_visual') else ""
+            result += f"{i}. {props.get('section', 'Unknown')} - Page {props.get('page', 'N/A')}{visual_indicator}\n"
+
+        return result
+
+    finally:
+        weaviate_client.close()
+
+# Example usage
+if __name__ == "__main__":
+    result = vision_rag_query(
+        question="Is Missouri considered a high wind zone for HVAC equipment?",
+        collection_name="Cook_Engineering_Manual",
+        limit=5
+    )
+    print(result)
+```
+
+#### Quick Vision Query Helper
+
+```python
+def quick_vision_query(question: str, search_query: str = None):
+    """
+    Quick helper for vision-enabled queries.
+    Automatically handles search, image retrieval, and GPT-4o Vision analysis.
+    """
+    from openai import OpenAI
+    import weaviate
+    import os
+
+    if search_query is None:
+        search_query = question
+
+    # Connect
+    client = weaviate.connect_to_weaviate_cloud(
+        cluster_url=os.getenv("WEAVIATE_URL"),
+        auth_credentials=weaviate.auth.Auth.api_key(os.getenv("WEAVIATE_API_KEY")),
+        skip_init_checks=True
+    )
+
+    try:
+        collection = client.collections.get("Cook_Engineering_Manual")
+
+        # Search with visual priority
+        results = collection.query.near_text(
+            query=search_query,
+            limit=3,
+            filters=Filter.by_property("has_critical_visual").equal(True),  # Prioritize visual content
+            return_properties=["content", "section", "page", "visual_content", "visual_description"]
+        )
+
+        if not results.objects:
+            return "No visual content found for this query."
+
+        # Use first result with image
+        obj = results.objects[0]
+        props = obj.properties
+
+        if not props.get('visual_content'):
+            return "No image found in search results."
+
+        # Analyze with GPT-4o Vision
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"{question}\n\nContext: {props.get('content', '')}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{props['visual_content']}"}}
+                ]
+            }]
+        )
+
+        return f"📄 Source: {props.get('section')} - Page {props.get('page')}\n\n{response.choices[0].message.content}"
+
+    finally:
+        client.close()
+
+# Usage
+answer = quick_vision_query("Is Missouri a high wind zone?", "Missouri wind zone map")
+print(answer)
+```
+
 ## Advanced Query Features
 
 ### 1. Limit and Offset (Pagination)
@@ -543,6 +843,38 @@ except Exception as e:
 - **Solution**: Verify collection has generative module configured
 - **Solution**: Check API keys for OpenAI/Cohere are set
 - **Solution**: Ensure sufficient API quota
+
+### Issue: "Vision query returns no images"
+- **Cause**: Collection doesn't have blob fields or images aren't stored
+- **Solution**: Verify your schema has a blob property (e.g., `visual_content`)
+- **Solution**: Check objects actually have image data: `obj.properties.get('visual_content')`
+- **Solution**: Use filter to prioritize visual content: `Filter.by_property("has_critical_visual").equal(True)`
+
+### Issue: "GPT-4o Vision API fails"
+- **Cause**: Missing or invalid OpenAI API key
+- **Solution**: Verify `OPENAI_API_KEY` is set in environment
+- **Solution**: Check API key has access to GPT-4o Vision (not all keys do)
+- **Solution**: Ensure you have sufficient API credits/quota
+
+### Issue: "Image is corrupted or won't display"
+- **Cause**: Image not properly base64 encoded
+- **Solution**: Ensure image is stored as base64 string in Weaviate
+- **Solution**: Verify format: `data:image/jpeg;base64,{base64_string}`
+- **Solution**: Check image size - very large images may need compression
+
+### Issue: "Vision analysis is incorrect or incomplete"
+- **Cause**: Low-quality image or GPT-4o can't interpret the visual
+- **Solution**: Use `"detail": "high"` parameter for technical diagrams/maps
+- **Solution**: Provide more context in the prompt about what type of visual it is
+- **Solution**: For complex charts/maps, ask specific questions rather than open-ended queries
+- **Example**: Instead of "What does this show?", ask "Is Missouri in the high wind zone on this map?"
+
+### Issue: "Vision query is slow"
+- **Cause**: GPT-4o Vision API calls take longer than text-only
+- **Solution**: Limit number of images analyzed (use `[:3]` to limit to 3 images)
+- **Solution**: Use smaller images when possible
+- **Solution**: Consider caching results for frequently asked questions
+- **Solution**: Filter to only retrieve visual content when needed
 
 ## Complete Query Pipeline Example
 

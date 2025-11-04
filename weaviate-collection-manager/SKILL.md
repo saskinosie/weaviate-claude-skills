@@ -1,19 +1,24 @@
 ---
 name: weaviate-collection-manager
-description: Create, view, update, and delete Weaviate collections with schema management
-version: 1.0.0
+description: Create, view, update, and delete Weaviate collections with schema management (for local Weaviate)
+version: 2.0.0
 author: Scott Askinosie
 dependencies:
   - weaviate-connection
+  - weaviate-local-setup
 ---
 
 # Weaviate Collection Manager Skill
 
-This skill helps you manage Weaviate collections - creating new ones, viewing existing schemas, and managing collection configurations.
+This skill helps you manage Weaviate collections on your **local Weaviate instance** - creating new ones, viewing existing schemas, and managing collection configurations.
+
+## Important Note
+
+**This skill is designed for LOCAL Weaviate instances only.** Ensure you have Weaviate running locally in Docker before using this skill.
 
 ## Purpose
 
-Manage the structure and configuration of your Weaviate vector database collections.
+Manage the structure and configuration of your local Weaviate vector database collections.
 
 ## When to Use This Skill
 
@@ -23,8 +28,22 @@ Manage the structure and configuration of your Weaviate vector database collecti
 - User wants to delete a collection
 - User asks about collection configuration
 
+## Prerequisites Check
+
+**Claude should verify these prerequisites before proceeding:**
+
+1. ✅ **weaviate-local-setup** completed - Python environment and dependencies installed
+2. ✅ **weaviate-connection** completed - Successfully connected to Weaviate
+3. ✅ **Docker container running** - Weaviate is accessible at localhost:8080
+
+**If any prerequisites are missing, Claude should:**
+- Load the required prerequisite skill first
+- Guide the user through the setup
+- Then return to this skill
+
 ## Prerequisites
 
+- **Local Weaviate running in Docker** (see **weaviate-local-setup** skill)
 - Active Weaviate connection (use **weaviate-connection** skill first)
 - Python weaviate-client library installed
 

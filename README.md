@@ -1,6 +1,19 @@
 # Weaviate Skills Collection
 
-A comprehensive set of Claude Skills for working with Weaviate vector databases. These skills enable you to connect, manage, ingest data, and query Weaviate directly through Claude.ai or Claude Desktop.
+A comprehensive set of Claude Skills for working with **local Weaviate vector databases**. These skills enable you to connect, manage, ingest data, and query Weaviate running in Docker directly through Claude.ai or Claude Desktop.
+
+## Important: Local Weaviate Required
+
+**These skills are designed for LOCAL Weaviate instances running in Docker.**
+
+⚠️ **Claude Desktop and Claude Web have network restrictions** that prevent connections to external services like Weaviate Cloud. Therefore, these skills use a local Docker-based Weaviate instance that runs on `localhost:8080` with no network limitations.
+
+**Benefits of Local Setup:**
+- ✅ No network restrictions in Claude
+- ✅ Free (no cloud costs)
+- ✅ Fast local queries
+- ✅ Full data privacy and control
+- ✅ Works offline (with transformers vectorizer)
 
 ## What are Claude Skills?
 
@@ -12,16 +25,29 @@ Skills provide:
 - **Portability**: Easy to share and reuse across projects
 - **No Deployment**: Works directly in Claude.ai web or Claude Desktop
 - **Client-Friendly**: Just download folders and start using
+- **Local-First**: Run Weaviate in Docker, no external dependencies
 
 ## Available Skills
 
-### 1. [weaviate-connection](weaviate-connection/)
-Connect to Weaviate cloud or local instances with proper authentication and connection verification.
+### 0. [weaviate-local-setup](weaviate-local-setup/) **← START HERE**
+Set up and manage a local Weaviate instance using Docker for development and testing.
 
-**When to use**: First step for any Weaviate work - establishes database connection
+**When to use**: Before anything else - sets up your local Weaviate database
 
 **Key features**:
-- Cloud and local connection support
+- Docker and Docker Compose configurations
+- Multiple vectorizer options (transformers, OpenAI, Cohere)
+- Data persistence and backup
+- No cloud costs or network restrictions
+- Perfect for Claude Desktop/Web environments
+
+### 1. [weaviate-connection](weaviate-connection/)
+Connect to your local Weaviate instance and verify connection health.
+
+**When to use**: After starting Weaviate - establishes database connection
+
+**Key features**:
+- Local connection to Docker instance
 - Environment variable management
 - Connection health checks
 - Error troubleshooting
@@ -67,40 +93,91 @@ Search and retrieve data using semantic search, filters, RAG, and hybrid queries
 
 ## Quick Start
 
-### Option 1: Claude.ai Web (Easiest)
+### Step 1: Get the Skills
 
+**Option A: Download**
 1. Download this repository as ZIP
 2. Extract the `weaviate-skills` folder
-3. Open [Claude.ai](https://claude.ai)
-4. In your conversation, say: "I have Weaviate skills in a folder. Let me share them."
-5. Reference the skills folder when needed
+3. Place it somewhere accessible (e.g., `~/Documents/`)
 
-### Option 2: Claude Desktop
+**Option B: Clone**
+```bash
+git clone https://github.com/saskinosie/weaviate-claude-skills.git ~/Documents/weaviate-claude-skills
+```
 
-1. Clone or download this repository
-2. Place `weaviate-skills` in a known location (e.g., `~/Documents/`)
-3. In Claude Desktop, reference skills by folder path
-4. Example: "Load the skills from ~/Documents/weaviate-skills/"
-
-### Option 3: Project Integration
-
+**Option C: Project Integration**
 1. Add `weaviate-skills/` to your project repository
 2. Commit skills alongside your code
-3. Claude will discover and use them automatically when working on your project
 
-## Installation
+### Step 2: Set Up Python Environment (Optional)
 
-### Prerequisites
+**Claude will handle this automatically**, but you can set it up manually if preferred:
 
 ```bash
-# Install Python dependencies
-pip install weaviate-client openai python-dotenv
+cd weaviate-claude-skills
 
-# Or use requirements.txt
+# Create virtual environment
+python3 -m venv .venv
+
+# Activate it
+source .venv/bin/activate  # macOS/Linux
+# OR
+.venv\Scripts\activate     # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-Create `requirements.txt`:
+**Note:** When you use the skills with Claude, Claude will check for dependencies and create the virtual environment if needed.
+
+### Step 3: Start Local Weaviate
+
+**Required: Docker Desktop must be installed and running**
+
+```bash
+cd weaviate-claude-skills/weaviate-local-setup
+docker-compose up -d
+```
+
+Wait 10-15 seconds for startup, then verify:
+```bash
+curl http://localhost:8080/v1/.well-known/ready
+```
+
+### Step 4: Use in Claude
+
+**Claude.ai Web:**
+1. Open [Claude.ai](https://claude.ai)
+2. Upload the individual `SKILL.md` files you need (attachment limit: 20 files)
+3. Upload your `.env` file
+4. Say: "Connect to my local Weaviate instance"
+
+**Claude Desktop:**
+1. Open Claude Desktop
+2. Reference the skills folder in your conversation
+3. Say: "I have Weaviate skills in ~/Documents/weaviate-skills. Connect to my local Weaviate instance."
+
+**Note**: Due to the 20-file attachment limit in Claude Web, you may need to upload skills individually rather than the entire folder (the `.git` folder contains many files). Claude Desktop doesn't have this limitation.
+
+## Installation Details
+
+### Python Environment
+
+**Claude handles dependency management automatically!** When you first use the skills, Claude will:
+1. Check if a virtual environment exists
+2. Create `.venv/` if needed
+3. Install required packages (weaviate-client, python-dotenv, etc.)
+4. Run all Python code within the virtual environment
+
+**Manual setup (optional):**
+```bash
+cd weaviate-claude-skills
+python3 -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt
+```
+
+The `requirements.txt` includes:
 ```
 weaviate-client>=4.0.0
 openai>=1.0.0
@@ -109,7 +186,7 @@ python-dotenv>=1.0.0
 
 ### Environment Setup
 
-Your Weaviate credentials go in a `.env` file in this directory:
+Your configuration goes in a `.env` file in the project root:
 
 1. **Copy the template**:
    ```bash
@@ -138,10 +215,53 @@ Your Weaviate credentials go in a `.env` file in this directory:
 - Share `.env.example` with your clients as a template
 - Each person needs their own `.env` file with their credentials
 
+### Local Setup (Docker)
+
+For local development or if you have network restrictions in Claude:
+
+1. **Install Docker Desktop** (if not already installed)
+
+2. **Start Weaviate locally** using the `weaviate-local-setup` skill:
+   ```bash
+   cd weaviate-skills/weaviate-local-setup
+   docker-compose up -d
+   ```
+
+3. **Update your `.env` for local connection**:
+   ```bash
+   WEAVIATE_URL=localhost:8080
+   WEAVIATE_API_KEY=  # Leave empty for local
+   ```
+
+4. **Verify it's running**:
+   ```bash
+   curl http://localhost:8080/v1/.well-known/ready
+   ```
+
+**Benefits of local setup**:
+- No network restrictions (works in Claude Web and Claude Desktop)
+- Free (no cloud costs)
+- Faster development cycles
+- Full data control and privacy
+
 ## Workflow
 
+### Cloud Workflow
 ```
 1. Connect to Weaviate (weaviate-connection)
+   ↓
+2. Create/Manage Collections (weaviate-collection-manager)
+   ↓
+3. Upload Data (weaviate-data-ingestion)
+   ↓
+4. Query and Search (weaviate-query-agent)
+```
+
+### Local Development Workflow
+```
+0. Start Local Weaviate (weaviate-local-setup)
+   ↓
+1. Connect to Weaviate (weaviate-connection) - using localhost:8080
    ↓
 2. Create/Manage Collections (weaviate-collection-manager)
    ↓
@@ -230,7 +350,7 @@ dependencies:
 
 Claude will automatically load prerequisite skills as needed.
 
-## Sharing with Clients
+## Sharing with Friends
 
 ### For Testing/Demos
 
@@ -262,10 +382,17 @@ Claude will automatically load prerequisite skills as needed.
 
 ## Troubleshooting
 
-### "Cannot connect to Weaviate"
+### "Cannot connect to Weaviate" or "Network domain not allowed"
+
+**For Cloud Instances:**
 - Verify URL doesn't include `https://` prefix
 - Check API key is correct
 - Ensure cluster is running (for self-hosted)
+
+**For Claude Desktop/Web with Network Restrictions:**
+- Use the local setup instead (see `weaviate-local-setup` skill)
+- In Claude Desktop: Add `*.weaviate.cloud` to **Settings → Capabilities → Allow network egress → Additional allowed domains**
+- Or run Weaviate locally with Docker (no network restrictions)
 
 ### "No results found"
 - Confirm collection has data
@@ -276,6 +403,11 @@ Claude will automatically load prerequisite skills as needed.
 - Reduce batch size
 - Validate data types match schema
 - Check for network timeouts
+
+### Local Docker Issues
+- Port 8080 already in use: Change port or stop conflicting service
+- Container won't start: Check logs with `docker logs weaviate`
+- Data not persisting: Ensure you're using volumes (`-v weaviate-data:/var/lib/weaviate`)
 
 See individual skill files for detailed troubleshooting guides.
 
@@ -302,19 +434,27 @@ Chain skills together for complete data processing pipelines.
 - Cohere API key (for text2vec-cohere)
 - HuggingFace models (for text2vec-huggingface)
 
+**For Local Development**:
+- Docker Desktop (for weaviate-local-setup)
+
 ## Project Structure
 
 ```
 weaviate-skills/
 ├── README.md                          # This file
+├── .env.example                       # Environment template
+├── .gitignore                         # Git ignore rules
 ├── weaviate-connection/
 │   └── SKILL.md                       # Connection skill
 ├── weaviate-collection-manager/
 │   └── SKILL.md                       # Collection management skill
 ├── weaviate-data-ingestion/
 │   └── SKILL.md                       # Data upload skill
-└── weaviate-query-agent/
-    └── SKILL.md                       # Query and search skill
+├── weaviate-query-agent/
+│   └── SKILL.md                       # Query and search skill
+└── weaviate-local-setup/
+    ├── SKILL.md                       # Local Weaviate setup guide
+    └── docker-compose.yml             # Docker Compose configuration
 ```
 
 ## Contributing
@@ -341,4 +481,3 @@ MIT License - Free to use, modify, and distribute.
 
 **Built with ❤️ for the Weaviate community**
 
-*Questions? Issues? Open an issue or reach out to the Weaviate community on [Discord](https://weaviate.io/slack).*

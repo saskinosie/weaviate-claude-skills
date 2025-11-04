@@ -1,20 +1,25 @@
 ---
 name: weaviate-data-ingestion
-description: Upload and process data into Weaviate collections with support for single objects, batch uploads, and multi-modal content
-version: 1.0.0
+description: Upload and process data into local Weaviate collections with support for single objects, batch uploads, and multi-modal content
+version: 2.0.0
 author: Scott Askinosie
 dependencies:
   - weaviate-connection
   - weaviate-collection-manager
+  - weaviate-local-setup
 ---
 
 # Weaviate Data Ingestion Skill
 
-This skill helps you upload data to Weaviate collections efficiently, handling everything from single objects to large batch imports.
+This skill helps you upload data to your **local Weaviate collections** efficiently, handling everything from single objects to large batch imports.
+
+## Important Note
+
+**This skill is designed for LOCAL Weaviate instances only.** Ensure you have Weaviate running locally in Docker before using this skill.
 
 ## Purpose
 
-Add data to your Weaviate collections with automatic vectorization, proper error handling, and progress tracking.
+Add data to your local Weaviate collections with automatic vectorization, proper error handling, and progress tracking.
 
 ## When to Use This Skill
 
@@ -24,8 +29,23 @@ Add data to your Weaviate collections with automatic vectorization, proper error
 - User wants to import data from files (JSON, CSV, text)
 - User asks about batch uploading or bulk data import
 
+## Prerequisites Check
+
+**Claude should verify these prerequisites before proceeding:**
+
+1. ✅ **weaviate-local-setup** completed - Python environment and dependencies installed
+2. ✅ **weaviate-connection** completed - Successfully connected to Weaviate
+3. ✅ **weaviate-collection-manager** used - Target collection exists
+4. ✅ **Docker container running** - Weaviate is accessible at localhost:8080
+
+**If any prerequisites are missing, Claude should:**
+- Load the required prerequisite skill first
+- Guide the user through the setup
+- Then return to this skill
+
 ## Prerequisites
 
+- **Local Weaviate running in Docker** (see **weaviate-local-setup** skill)
 - Active Weaviate connection (use **weaviate-connection** skill first)
 - Existing collection (use **weaviate-collection-manager** skill to create)
 - Python weaviate-client library installed
@@ -181,6 +201,44 @@ print("✅ CSV import complete")
 ```
 
 ### 6. Upload Images (Multi-modal Collections)
+
+**⚠️ IMPORTANT: Verify Multimodal Vectorizer First**
+
+Before uploading images, verify your collection uses a multimodal vectorizer:
+
+```python
+# Check collection configuration
+collection = client.collections.get("ProductCatalog")
+config = collection.config.get()
+
+# Get vectorizer info
+vectorizer = config.vectorizer.config.name if hasattr(config.vectorizer.config, 'name') else str(config.vectorizer)
+
+# List of multimodal-compatible vectorizers
+MULTIMODAL_VECTORIZERS = [
+    'multi2vec-clip',
+    'multi2vec-bind',
+    'img2vec-neural',
+]
+
+# Validate vectorizer
+is_multimodal = any(mv in str(vectorizer).lower() for mv in MULTIMODAL_VECTORIZERS)
+
+if not is_multimodal:
+    print(f"❌ Warning: Collection uses '{vectorizer}' which may not support images properly")
+    print(f"   Recommended vectorizers for images: {', '.join(MULTIMODAL_VECTORIZERS)}")
+    print(f"   Images will be stored but may not be vectorized correctly for semantic search")
+
+    # Prompt user to continue
+    response = input("\nContinue anyway? (y/n): ")
+    if response.lower() != 'y':
+        print("Aborted. Use weaviate-collection-manager skill to create a multimodal collection.")
+        exit()
+else:
+    print(f"✅ Collection uses multimodal vectorizer: {vectorizer}")
+```
+
+#### Single Image Upload
 
 ```python
 import base64
@@ -674,6 +732,36 @@ finally:
 ### Issue: "UUID already exists"
 - **Cause**: Trying to insert duplicate UUID
 - **Solution**: Use `generate_uuid5()` with unique content or let Weaviate auto-generate
+
+### Issue: Images uploaded but semantic image search doesn't work
+
+- **Cause**: Collection is using a text-only vectorizer (e.g., `text2vec-openai`, `text2vec-cohere`) instead of a multimodal vectorizer
+- **Symptoms**:
+  - Images store successfully as base64 strings
+  - Searching for images by visual similarity returns poor results
+  - Only text-based searches work
+- **Solution**:
+  1. Check your collection's vectorizer configuration:
+     ```python
+     config = collection.config.get()
+     print(f"Current vectorizer: {config.vectorizer}")
+     ```
+  2. If using a text-only vectorizer, you have two options:
+     - **Option A**: Create a new collection with a multimodal vectorizer (`multi2vec-clip` or `multi2vec-bind`) and re-import your data
+     - **Option B**: Keep text-only vectorizer but understand images won't be semantically searchable (only stored as properties)
+  3. Use the **weaviate-collection-manager** skill to create a properly configured multimodal collection
+
+### Issue: "Vectorizer doesn't support this data type"
+
+- **Cause**: Attempting to vectorize data types incompatible with the collection's vectorizer
+- **Examples**:
+  - Using `text2vec-*` vectorizers with image/audio/video data
+  - Using `img2vec-*` vectorizers with text-only data
+- **Solution**: Match your data types to compatible vectorizers:
+  - **Text only**: `text2vec-openai`, `text2vec-cohere`, `text2vec-huggingface`
+  - **Images + Text**: `multi2vec-clip`, `multi2vec-bind`
+  - **Images only**: `img2vec-neural`
+- **Prevention**: Always verify vectorizer compatibility before ingestion (see Section 6 validation code)
 
 ## Next Steps
 

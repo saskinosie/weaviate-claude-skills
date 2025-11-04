@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  weaviate:
+    image: semitechnologies/weaviate:1.28.1
+    container_name: weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      # Query Settings
+      QUERY_DEFAULTS_LIMIT: 25
+
+      # Authentication (disabled for local dev)
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+
+      # Persistence
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+
+      # Default Vectorizer (choose one - uncomment the one you want)
+      # Option 1: Transformers (local, no API key needed)
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-transformers'
+
+      # Option 2: OpenAI (requires API key)
+      # DEFAULT_VECTORIZER_MODULE: 'text2vec-openai'
+
+      # Option 3: Cohere (requires API key)
+      # DEFAULT_VECTORIZER_MODULE: 'text2vec-cohere'
+
+      # Enabled Modules (add modules you want to use)
+      # Transformers setup (local):
+      ENABLE_MODULES: 'text2vec-transformers'
+
+      # OpenAI setup (requires API key in .env):
+      # ENABLE_MODULES: 'text2vec-openai,generative-openai'
+
+      # Cohere setup (requires API key in .env):
+      # ENABLE_MODULES: 'text2vec-cohere,generative-cohere'
+
+      # Multi-modal setup:
+      # ENABLE_MODULES: 'multi2vec-clip,text2vec-transformers'
+
+      # Full setup (all modules):
+      # ENABLE_MODULES: 'text2vec-openai,text2vec-cohere,text2vec-transformers,generative-openai,generative-cohere,multi2vec-clip'
+
+      # Transformers Inference API (only needed if using transformers)
+      TRANSFORMERS_INFERENCE_API: 'http://t2v-transformers:8080'
+
+      # CLIP Inference API (only needed if using CLIP)
+      # CLIP_INFERENCE_API: 'http://multi2vec-clip:8080'
+
+      # Cluster Settings
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate-data:/var/lib/weaviate
+    networks:
+      - weaviate-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Transformers module (for local embeddings - no API key needed)
+  t2v-transformers:
+    image: semitechnologies/transformers-inference:sentence-transformers-multi-qa-MiniLM-L6-cos-v1
+    container_name: t2v-transformers
+    restart: unless-stopped
+    environment:
+      ENABLE_CUDA: '0'  # Set to '1' if you have NVIDIA GPU
+    networks:
+      - weaviate-network
+    # Uncomment below to limit resources
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2.0'
+    #       memory: 2G
+
+  # CLIP module (for multi-modal search - uncomment if needed)
+  # multi2vec-clip:
+  #   image: semitechnologies/multi2vec-clip:sentence-transformers-clip-ViT-B-32
+  #   container_name: multi2vec-clip
+  #   restart: unless-stopped
+  #   environment:
+  #     ENABLE_CUDA: '0'
+  #   networks:
+  #     - weaviate-network
+
+  # Weaviate Console (optional web UI)
+  # weaviate-console:
+  #   image: semitechnologies/weaviate-console:latest
+  #   container_name: weaviate-console
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8081:8080"
+  #   networks:
+  #     - weaviate-network
+
+volumes:
+  weaviate-data:
+    name: weaviate-data
+
+networks:
+  weaviate-network:
+    name: weaviate-network
+    driver: bridge

@@ -1,0 +1,21 @@
+# Weaviate Skills - Python Dependencies
+
+# Weaviate Python Client (v4+)
+weaviate-client>=4.0.0
+
+# OpenAI API (for vectorizers and RAG)
+openai>=1.0.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Optional: Cohere API (if using Cohere vectorizers)
+# cohere>=4.0.0
+
+# Optional: For advanced data processing
+# pandas>=2.0.0
+# numpy>=1.24.0
+
+# Optional: For document processing
+# pypdf2>=3.0.0
+# python-docx>=1.0.0
